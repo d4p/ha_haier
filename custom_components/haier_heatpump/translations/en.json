@@ -1,0 +1,72 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Haier Heat Pump Connection",
+                "description": "Configure the Modbus TCP connection to your Haier heat pump.",
+                "data": {
+                    "ip_address": "IP Address",
+                    "port": "Port",
+                    "device_id": "Modbus Device ID",
+                    "scan_interval": "Polling Interval (seconds)"
+                }
+            },
+            "heating_curve": {
+                "title": "Heating Curve Configuration",
+                "description": "Configure the heating curve for automatic water temperature control.\n\n{curve_svg}",
+                "data": {
+                    "external_temp_sensor": "External Temperature Sensor",
+                    "demand_switch": "Demand Switch",
+                    "curve_type": "Curve Type",
+                    "curve_slope": "Curve Slope (steepness)",
+                    "curve_base_temp": "Base Temperature",
+                    "curve_offset": "Temperature Offset",
+                    "curve_setpoint": "Indoor Target Temperature",
+                    "curve_points": "Curve Points (format: outdoor:water, e.g. -20:50, -10:45, 0:38, 10:32, 20:25)"
+                }
+            },
+            "antifreeze": {
+                "title": "Antifreeze Protection",
+                "description": "Configure antifreeze protection thresholds. This protection is always active and cannot be disabled.",
+                "data": {
+                    "antifreeze_warning_temp": "Warning Threshold (turn on pump)",
+                    "antifreeze_critical_temp": "Critical Threshold (turn on + set emergency temp)",
+                    "antifreeze_emergency_ch_temp": "Emergency CH Temperature",
+                    "antifreeze_recovery_temp": "Recovery Threshold (deactivate protection)"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Cannot connect to the heat pump. Check IP address and port.",
+            "cannot_read": "Connected but cannot read registers. Check device ID.",
+            "invalid_curve_points": "Invalid curve points format. Use 'outdoor:water' pairs separated by commas.",
+            "critical_above_warning": "Critical threshold must be below warning threshold.",
+            "recovery_below_warning": "Recovery threshold must be above warning threshold."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Haier Heat Pump Settings",
+                "description": "Adjust heating curve and safety parameters.\n\n{curve_svg}",
+                "data": {
+                    "external_temp_sensor": "External Temperature Sensor",
+                    "demand_switch": "Demand Switch",
+                    "curve_type": "Curve Type",
+                    "curve_slope": "Curve Slope (steepness)",
+                    "curve_base_temp": "Base Temperature",
+                    "curve_offset": "Temperature Offset",
+                    "curve_setpoint": "Indoor Target Temperature",
+                    "curve_points": "Curve Points (format: outdoor:water)",
+                    "antifreeze_warning_temp": "Antifreeze Warning Threshold",
+                    "antifreeze_critical_temp": "Antifreeze Critical Threshold",
+                    "antifreeze_emergency_ch_temp": "Antifreeze Emergency CH Temperature",
+                    "antifreeze_recovery_temp": "Antifreeze Recovery Threshold"
+                }
+            }
+        },
+        "error": {
+            "invalid_curve_points": "Invalid curve points format."
+        }
+    }
+}
