@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import base64
 from typing import Any
 
 import voluptuous as vol
@@ -151,6 +152,8 @@ class HaierHeatPumpConfigFlow(
             "setpoint": DEFAULT_CURVE_SETPOINT,
         }
         svg = generate_curve_svg(DEFAULT_CURVE_TYPE, curve_params)
+        svg_b64 = base64.b64encode(svg.encode("utf-8")).decode("utf-8")
+        svg_img = f"![Heating Curve](data:image/svg+xml;base64,{svg_b64})"
 
         data_schema = vol.Schema(
             {
@@ -233,7 +236,7 @@ class HaierHeatPumpConfigFlow(
             step_id="heating_curve",
             data_schema=data_schema,
             errors=errors,
-            description_placeholders={"curve_svg": svg},
+            description_placeholders={"curve_svg": svg_img},
         )
 
     async def async_step_antifreeze(
@@ -362,6 +365,8 @@ class HaierOptionsFlow(config_entries.OptionsFlow):
         curve_type = current.get(CONF_CURVE_TYPE, DEFAULT_CURVE_TYPE)
         curve_params = self._get_curve_params(current)
         svg = generate_curve_svg(curve_type, curve_params)
+        svg_b64 = base64.b64encode(svg.encode("utf-8")).decode("utf-8")
+        svg_img = f"![Heating Curve](data:image/svg+xml;base64,{svg_b64})"
 
         cur_points = current.get(CONF_CURVE_POINTS, "")
         if isinstance(cur_points, dict):
@@ -510,7 +515,7 @@ class HaierOptionsFlow(config_entries.OptionsFlow):
             step_id="init",
             data_schema=data_schema,
             errors=errors,
-            description_placeholders={"curve_svg": svg},
+            description_placeholders={"curve_svg": svg_img},
         )
 
     def _get_curve_params(self, current: dict) -> dict[str, Any]:
