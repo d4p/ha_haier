@@ -1,12 +1,17 @@
 {
   "domain": "haier_heatpump",
   "name": "Haier Heat Pump",
-  "codeowners": ["@beny"],
+  "codeowners": [
+    "@beny"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/beny/haier_heatpump",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/beny/haier_heatpump/issues",
-  "requirements": ["PyHaier==0.4.4", "pymodbus>=3.5.0"],
-  "version": "1.0.0",
+  "requirements": [
+    "PyHaier==0.4.4",
+    "pymodbus>=3.5.0"
+  ],
+  "version": "0.0.3",
   "integration_type": "device"
 }
