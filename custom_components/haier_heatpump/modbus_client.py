@@ -120,11 +120,26 @@ class HaierModbusClient:
 
         for attempt in range(MODBUS_RETRIES):
             try:
-                resp = self._client.read_holding_registers(
-                    address=address,
-                    count=count,
-                    slave=self._device_id,
-                )
+                # Try with 'slave' first (pymodbus 3.x)
+                kwargs = {"slave": self._device_id}
+                try:
+                    resp = self._client.read_holding_registers(
+                        address=address,
+                        count=count,
+                        **kwargs,
+                    )
+                except TypeError:
+                    # Fallback to 'unit' (pymodbus 2.x/older 3.x)
+                    _LOGGER.debug(
+                        "Pymodbus 'slave' argument failed, trying 'unit'"
+                    )
+                    kwargs = {"unit": self._device_id}
+                    resp = self._client.read_holding_registers(
+                        address=address,
+                        count=count,
+                        **kwargs,
+                    )
+
                 if resp is None or resp.isError():
                     _LOGGER.warning(
                         "Modbus read error at %d-%d (attempt %d/%d): %s",
@@ -147,11 +162,13 @@ class HaierModbusClient:
                     exc,
                 )
                 time.sleep(0.5 * (attempt + 1))
-            except Exception:
-                _LOGGER.exception(
-                    "Unexpected error reading registers %d-%d",
+            except Exception as exc:  # pylint: disable=broad-except
+                _LOGGER.error(
+                    "Unexpected error reading registers %d-%d: %s (%s)",
                     address,
                     address + count - 1,
+                    exc,
+                    type(exc).__name__,
                 )
                 return None
 
@@ -184,11 +201,26 @@ class HaierModbusClient:
             time.sleep(MIN_WRITE_INTERVAL - elapsed)
 
         try:
-            resp = self._client.write_registers(
-                address=address,
-                values=values,
-                slave=self._device_id,
-            )
+            # Try with 'slave' first (pymodbus 3.x)
+            kwargs = {"slave": self._device_id}
+            try:
+                resp = self._client.write_registers(
+                    address=address,
+                    values=values,
+                    **kwargs,
+                )
+            except TypeError:
+                # Fallback to 'unit' (pymodbus 2.x/older 3.x)
+                _LOGGER.debug(
+                    "Pymodbus 'slave' argument failed, trying 'unit'"
+                )
+                kwargs = {"unit": self._device_id}
+                resp = self._client.write_registers(
+                    address=address,
+                    values=values,
+                    **kwargs,
+                )
+
             self._last_write_time = time.monotonic()
 
             if resp is None or resp.isError():
@@ -199,10 +231,11 @@ class HaierModbusClient:
 
             # Read-back verification
             time.sleep(0.5)
+            # Use same kwargs for read-back
             verify = self._client.read_holding_registers(
                 address=address,
                 count=len(values),
-                slave=self._device_id,
+                **kwargs,
             )
             if verify is None or verify.isError():
                 _LOGGER.warning(
@@ -229,9 +262,12 @@ class HaierModbusClient:
         except ModbusException as exc:
             _LOGGER.error("Modbus write exception at %d: %s", address, exc)
             return False
-        except Exception:
-            _LOGGER.exception(
-                "Unexpected error writing registers at %d", address
+        except Exception as exc:  # pylint: disable=broad-except
+            _LOGGER.error(
+                "Unexpected error writing registers at %d: %s (%s)",
+                address,
+                exc,
+                type(exc).__name__,
             )
             return False
 
