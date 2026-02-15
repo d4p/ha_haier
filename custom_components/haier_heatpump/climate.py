@@ -249,10 +249,9 @@ class HaierClimate(CoordinatorEntity[HaierDataCoordinator], ClimateEntity):
             return
 
         if hvac_mode == HVACMode.HEAT:
-            # Turn ON using the selected operation mode
-            target_mode = self.hass.data[DOMAIN][self._entry.entry_id].get(DATA_OPERATION_MODE, "HT")
-            _LOGGER.debug("Turning ON with mode: %s", target_mode)
-            new_state = PyHaier.SetState(core, target_mode)
+            # Turn ON (preserve last mode)
+            _LOGGER.debug("Turning ON (preserving mode)")
+            new_state = PyHaier.SetState(core, "on")
         elif hvac_mode == HVACMode.OFF:
             new_state = PyHaier.SetState(core, "off")
         else:
