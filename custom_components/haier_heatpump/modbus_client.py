@@ -136,7 +136,7 @@ class HaierModbusClient:
 
         for attempt in range(MODBUS_RETRIES):
             try:
-                # Try with 'slave' first (pymodbus 3.x)
+                # Try with 'slave' first (pymodbus 3.x standard)
                 try:
                     resp = self._client.read_holding_registers(
                         address=address,
@@ -148,7 +148,7 @@ class HaierModbusClient:
                         "Pymodbus 'slave' argument failed (%s), trying 'unit'",
                         exc_slave,
                     )
-                    # Fallback to 'unit' (pymodbus 2.x/older 3.x)
+                    # Fallback to 'unit' (pymodbus 2.x standard)
                     try:
                         resp = self._client.read_holding_registers(
                             address=address,
@@ -156,12 +156,25 @@ class HaierModbusClient:
                             unit=self._device_id,
                         )
                     except TypeError as exc_unit:
-                        _LOGGER.error(
-                            "Read failed: neither 'slave' (%s) nor 'unit' (%s) accepted",
-                            exc_slave,
+                        _LOGGER.debug(
+                            "Pymodbus 'unit' argument failed (%s), trying 'device_id'",
                             exc_unit,
                         )
-                        return None
+                        # Fallback to 'device_id' (user's working script uses this)
+                        try:
+                            resp = self._client.read_holding_registers(
+                                address=address,
+                                count=count,
+                                device_id=self._device_id,
+                            )
+                        except TypeError as exc_dev:
+                            _LOGGER.error(
+                                "Read failed: 'slave' (%s), 'unit' (%s), 'device_id' (%s) all rejected",
+                                exc_slave,
+                                exc_unit,
+                                exc_dev,
+                            )
+                            return None
 
                 if resp is None or resp.isError():
                     _LOGGER.warning(
@@ -225,7 +238,7 @@ class HaierModbusClient:
             time.sleep(MIN_WRITE_INTERVAL - elapsed)
 
         try:
-            # Try with 'slave' first (pymodbus 3.x)
+            # Try with 'slave' first (pymodbus 3.x standard)
             kwargs = {}
             try:
                 resp = self._client.write_registers(
@@ -235,11 +248,11 @@ class HaierModbusClient:
                 )
                 kwargs = {"slave": self._device_id}
             except TypeError as exc_slave:
-                # Fallback to 'unit' (pymodbus 2.x/older 3.x)
                 _LOGGER.debug(
                     "Pymodbus 'slave' argument failed (%s), trying 'unit'",
                     exc_slave,
                 )
+                # Fallback to 'unit' (pymodbus 2.x standard)
                 try:
                     resp = self._client.write_registers(
                         address=address,
@@ -248,12 +261,26 @@ class HaierModbusClient:
                     )
                     kwargs = {"unit": self._device_id}
                 except TypeError as exc_unit:
-                    _LOGGER.error(
-                        "Write failed: neither 'slave' (%s) nor 'unit' (%s) accepted",
-                        exc_slave,
+                    _LOGGER.debug(
+                        "Pymodbus 'unit' argument failed (%s), trying 'device_id'",
                         exc_unit,
                     )
-                    return False
+                    # Fallback to 'device_id' (user's working script uses this)
+                    try:
+                        resp = self._client.write_registers(
+                            address=address,
+                            values=values,
+                            device_id=self._device_id,
+                        )
+                        kwargs = {"device_id": self._device_id}
+                    except TypeError as exc_dev:
+                        _LOGGER.error(
+                            "Write failed: 'slave' (%s), 'unit' (%s), 'device_id' (%s) all rejected",
+                            exc_slave,
+                            exc_unit,
+                            exc_dev,
+                        )
+                        return False
 
             self._last_write_time = time.monotonic()
 
@@ -303,6 +330,7 @@ class HaierModbusClient:
                 type(exc).__name__,
             )
             return False
+
 
     async def async_read_core(self) -> list[int] | None:
         """Read core registers 101-106."""
