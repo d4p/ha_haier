@@ -359,6 +359,31 @@ class HaierModbusClient:
                 len(values),
             )
             return False
+
+        # Preserve high bytes (e.g., 0xDD prefix) if PyHaier stripped them
+        # This is crucial for some Haier models (e.g., M8)
+        current = await self.async_read_core()
+        if current:
+            new_values = []
+            for i, val in enumerate(values):
+                curr = current[i]
+                # If new value implies low-byte only (mask 0xFF00 is 0)
+                # and current value has a high byte set, restore it.
+                if (val & 0xFF00) == 0 and (curr & 0xFF00) != 0:
+                    patched = val | (curr & 0xFF00)
+                    if patched != val:
+                        _LOGGER.debug(
+                            "Patched core register %d: %s -> %s (preserved high byte 0x%02X)",
+                            REG_CORE_START + i,
+                            val,
+                            patched,
+                            (curr & 0xFF00) >> 8,
+                        )
+                    new_values.append(patched)
+                else:
+                    new_values.append(val)
+            values = new_values
+
         return await self.async_write_registers(REG_CORE_START, values)
 
     async def async_write_mode(self, values: list[int]) -> bool:
@@ -366,4 +391,26 @@ class HaierModbusClient:
         if len(values) != REG_MODE_COUNT:
             _LOGGER.error("Invalid mode register count")
             return False
+            
+        # Preserve high bytes for mode register too
+        current = await self.async_read_mode()
+        if current:
+            new_values = []
+            for i, val in enumerate(values):
+                curr = current[i]
+                if (val & 0xFF00) == 0 and (curr & 0xFF00) != 0:
+                    patched = val | (curr & 0xFF00)
+                    if patched != val:
+                        _LOGGER.debug(
+                            "Patched mode register %d: %s -> %s (preserved high byte 0x%02X)",
+                            REG_MODE_START + i,
+                            val,
+                            patched,
+                            (curr & 0xFF00) >> 8,
+                        )
+                    new_values.append(patched)
+                else:
+                    new_values.append(val)
+            values = new_values
+            
         return await self.async_write_registers(REG_MODE_START, values)
