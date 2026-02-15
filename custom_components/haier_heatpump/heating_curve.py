@@ -124,9 +124,22 @@ def calculate_target_temp(
             )
         elif curve_type == CURVE_TYPE_POINTS:
             points_raw = curve_params.get("points", DEFAULT_CURVE_POINTS)
+            
+            if isinstance(points_raw, str):
+                import json
+                try:
+                    points_raw = json.loads(points_raw)
+                except json.JSONDecodeError:
+                    _LOGGER.warning("Failed to parse curve points string: %s", points_raw)
+                    return clamp_ch_temp(DEFAULT_CURVE_BASE_TEMP)
+
             # Ensure keys are floats
-            points = {float(k): float(v) for k, v in points_raw.items()}
-            return calculate_point_curve(outdoor_temp, points)
+            if isinstance(points_raw, dict):
+                points = {float(k): float(v) for k, v in points_raw.items()}
+                return calculate_point_curve(outdoor_temp, points)
+            else:
+                _LOGGER.warning("Curve points are not a dictionary: %s", type(points_raw))
+                return clamp_ch_temp(DEFAULT_CURVE_BASE_TEMP)
         else:
             _LOGGER.error("Unknown curve type: %s", curve_type)
             return clamp_ch_temp(DEFAULT_CURVE_BASE_TEMP)
