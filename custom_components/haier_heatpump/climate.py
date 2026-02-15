@@ -45,6 +45,7 @@ from .const import (
     DEFAULT_CURVE_TYPE,
     DOMAIN,
     MANUFACTURER,
+    DATA_CURVE_ENABLED,
 )
 from .coordinator import HaierDataCoordinator
 from .heating_curve import calculate_target_temp, clamp_ch_temp
@@ -262,6 +263,10 @@ class HaierClimate(CoordinatorEntity[HaierDataCoordinator], ClimateEntity):
         if temp is None:
             return
 
+        if self.hass.data[DOMAIN][self._entry.entry_id].get(DATA_CURVE_ENABLED, True):
+            _LOGGER.warning("Cannot set temperature manually: heating curve is enabled")
+            return
+
         temp = clamp_ch_temp(float(temp))
         await self._async_send_ch_temp(temp)
 
@@ -303,6 +308,12 @@ class HaierClimate(CoordinatorEntity[HaierDataCoordinator], ClimateEntity):
 
         new_target = calculate_target_temp(outdoor_temp, curve_type, curve_params)
         self._curve_target = new_target
+
+        if not self.hass.data[DOMAIN][self._entry.entry_id].get(DATA_CURVE_ENABLED, True):
+            # Curve calculation still happens for display/debug, but we don't
+            # override the manual setpoint if curve mode is disabled.
+            self.async_write_ha_state()
+            return
 
         # Only send if demand is on and antifreeze isn't overriding
         if self._is_demand_on() and not (

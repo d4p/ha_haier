@@ -126,6 +126,7 @@ DATA_DEFROST = "defrost"
 DATA_ANTIFREEZE_ACTIVE = "antifreeze_active"
 DATA_CORE_REGISTERS = "core_registers"
 DATA_STATUS_REGISTERS = "status_registers"
+DATA_CURVE_ENABLED = "curve_enabled"
 
 # --- Platforms ---
-PLATFORMS = ["sensor", "binary_sensor", "climate", "select", "number"]
+PLATFORMS = ["sensor", "binary_sensor", "climate", "select", "number", "switch"]
