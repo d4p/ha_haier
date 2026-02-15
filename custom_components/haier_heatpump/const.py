@@ -127,6 +127,7 @@ DATA_ANTIFREEZE_ACTIVE = "antifreeze_active"
 DATA_CORE_REGISTERS = "core_registers"
 DATA_STATUS_REGISTERS = "status_registers"
 DATA_CURVE_ENABLED = "curve_enabled"
+DATA_OPERATION_MODE = "operation_mode"
 
 # --- Platforms ---
 PLATFORMS = ["sensor", "binary_sensor", "climate", "select", "number", "switch"]

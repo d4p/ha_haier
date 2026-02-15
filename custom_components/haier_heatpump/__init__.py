@@ -34,6 +34,7 @@ from .const import (
     DATA_CH_TEMP,
     DATA_CORE_REGISTERS,
     DATA_CURVE_ENABLED,
+    DATA_OPERATION_MODE,
     DATA_DHW_CURRENT,
     DATA_STATE,
     DATA_TWI,
@@ -83,6 +84,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": coordinator,
         "antifreeze": antifreeze_mgr,
         DATA_CURVE_ENABLED: True,
+        DATA_OPERATION_MODE: "HT",
     }
 
     # Register listener for coordinator updates (antifreeze check)

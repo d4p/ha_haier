@@ -46,6 +46,7 @@ from .const import (
     DOMAIN,
     MANUFACTURER,
     DATA_CURVE_ENABLED,
+    DATA_OPERATION_MODE,
 )
 from .coordinator import HaierDataCoordinator
 from .heating_curve import calculate_target_temp, clamp_ch_temp
@@ -144,6 +145,8 @@ class HaierClimate(CoordinatorEntity[HaierDataCoordinator], ClimateEntity):
         if self.coordinator.data is None:
             return HVACMode.OFF
 
+        # "Independent control" - if generic state is not OFF, we report HEAT (Active)
+        # Detailed mode is handled by the Select entity.
         state = self.coordinator.data.get(DATA_STATE, "")
         if state and "OFF" not in str(state).upper():
             return HVACMode.HEAT
@@ -246,7 +249,10 @@ class HaierClimate(CoordinatorEntity[HaierDataCoordinator], ClimateEntity):
             return
 
         if hvac_mode == HVACMode.HEAT:
-            new_state = PyHaier.SetState(core, "HT")
+            # Turn ON using the selected operation mode
+            target_mode = self.hass.data[DOMAIN][self._entry.entry_id].get(DATA_OPERATION_MODE, "HT")
+            _LOGGER.debug("Turning ON with mode: %s", target_mode)
+            new_state = PyHaier.SetState(core, target_mode)
         elif hvac_mode == HVACMode.OFF:
             new_state = PyHaier.SetState(core, "off")
         else:
