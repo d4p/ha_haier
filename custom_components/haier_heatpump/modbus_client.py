@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import time
 from typing import Any
 
+import pymodbus
 from pymodbus.client import ModbusTcpClient
 from pymodbus.exceptions import ModbusException
 
@@ -46,6 +48,14 @@ class HaierModbusClient:
         self._lock = asyncio.Lock()
         self._last_write_time: float = 0.0
 
+        try:
+            _LOGGER.info(
+                "HaierModbusClient initialized. Pymodbus version: %s",
+                pymodbus.__version__,
+            )
+        except AttributeError:
+            _LOGGER.info("HaierModbusClient initialized (unknown pymodbus version)")
+
     @property
     def connected(self) -> bool:
         """Return True if connected."""
@@ -77,6 +87,12 @@ class HaierModbusClient:
                     self._host,
                     self._port,
                 )
+                # Log method signature for debugging compatibility
+                try:
+                    sig = inspect.signature(self._client.read_holding_registers)
+                    _LOGGER.info("read_holding_registers signature: %s", sig)
+                except Exception:
+                    pass
             else:
                 _LOGGER.error(
                     "Failed to connect to Haier heat pump at %s:%s",
@@ -121,24 +137,31 @@ class HaierModbusClient:
         for attempt in range(MODBUS_RETRIES):
             try:
                 # Try with 'slave' first (pymodbus 3.x)
-                kwargs = {"slave": self._device_id}
                 try:
                     resp = self._client.read_holding_registers(
                         address=address,
                         count=count,
-                        **kwargs,
+                        slave=self._device_id,
                     )
-                except TypeError:
-                    # Fallback to 'unit' (pymodbus 2.x/older 3.x)
+                except TypeError as exc_slave:
                     _LOGGER.debug(
-                        "Pymodbus 'slave' argument failed, trying 'unit'"
+                        "Pymodbus 'slave' argument failed (%s), trying 'unit'",
+                        exc_slave,
                     )
-                    kwargs = {"unit": self._device_id}
-                    resp = self._client.read_holding_registers(
-                        address=address,
-                        count=count,
-                        **kwargs,
-                    )
+                    # Fallback to 'unit' (pymodbus 2.x/older 3.x)
+                    try:
+                        resp = self._client.read_holding_registers(
+                            address=address,
+                            count=count,
+                            unit=self._device_id,
+                        )
+                    except TypeError as exc_unit:
+                        _LOGGER.error(
+                            "Read failed: neither 'slave' (%s) nor 'unit' (%s) accepted",
+                            exc_slave,
+                            exc_unit,
+                        )
+                        return None
 
                 if resp is None or resp.isError():
                     _LOGGER.warning(
@@ -152,6 +175,7 @@ class HaierModbusClient:
                     time.sleep(0.5 * (attempt + 1))
                     continue
                 return resp.registers
+
             except ModbusException as exc:
                 _LOGGER.warning(
                     "Modbus exception reading %d-%d (attempt %d/%d): %s",
@@ -202,24 +226,34 @@ class HaierModbusClient:
 
         try:
             # Try with 'slave' first (pymodbus 3.x)
-            kwargs = {"slave": self._device_id}
+            kwargs = {}
             try:
                 resp = self._client.write_registers(
                     address=address,
                     values=values,
-                    **kwargs,
+                    slave=self._device_id,
                 )
-            except TypeError:
+                kwargs = {"slave": self._device_id}
+            except TypeError as exc_slave:
                 # Fallback to 'unit' (pymodbus 2.x/older 3.x)
                 _LOGGER.debug(
-                    "Pymodbus 'slave' argument failed, trying 'unit'"
+                    "Pymodbus 'slave' argument failed (%s), trying 'unit'",
+                    exc_slave,
                 )
-                kwargs = {"unit": self._device_id}
-                resp = self._client.write_registers(
-                    address=address,
-                    values=values,
-                    **kwargs,
-                )
+                try:
+                    resp = self._client.write_registers(
+                        address=address,
+                        values=values,
+                        unit=self._device_id,
+                    )
+                    kwargs = {"unit": self._device_id}
+                except TypeError as exc_unit:
+                    _LOGGER.error(
+                        "Write failed: neither 'slave' (%s) nor 'unit' (%s) accepted",
+                        exc_slave,
+                        exc_unit,
+                    )
+                    return False
 
             self._last_write_time = time.monotonic()
 
@@ -231,7 +265,6 @@ class HaierModbusClient:
 
             # Read-back verification
             time.sleep(0.5)
-            # Use same kwargs for read-back
             verify = self._client.read_holding_registers(
                 address=address,
                 count=len(values),
