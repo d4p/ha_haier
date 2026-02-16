@@ -4,6 +4,27 @@
 
 Custom Home Assistant integration for **Haier heat pumps** using the [PyHaier](https://github.com/ktostam/PyHaier) library over Modbus TCP.
 
+## Architecture
+
+```mermaid
+graph TB
+    subgraph "Home Assistant"
+        CF["Config Flow<br/>(3-step setup)"] --> INIT["__init__.py<br/>(setup + antifreeze)"]
+        INIT --> COORD["Coordinator<br/>(30s polling)"]
+        INIT --> AF["AntifreezeManager<br/>(always-on)"]
+        COORD --> MB["ModbusClient<br/>(async + thread-safe)"]
+        COORD --> SENS["~35 Sensors"]
+        COORD --> BS["4 Binary Sensors"]
+        COORD --> CLIM["Climate Entity"]
+        COORD --> SEL["Mode Select"]
+        COORD --> NUM["DHW Number"]
+        CLIM --> HC["Heating Curve Engine"]
+    end
+    MB <--> |"Modbus TCP"| HP["Haier Heat Pump"]
+    EXT["External Temp Sensor"] --> CLIM
+    DSW["Demand Switch"] --> CLIM
+```
+
 ## Features
 
 - **Full sensor suite**: ~35 sensors exposing all available heat pump data (temperatures, compressor, fans, pressures, errors, firmware, etc.)
