@@ -23,10 +23,8 @@ Custom Home Assistant integration for **Haier heat pumps** using the [PyHaier](h
 - **Safety first**: Rate limiting, read-before-write, write verification, temperature clamping
 
 ## Views
-Integration:
-[integration view](./images/integration_view.png)]
-Configuration:
-[configuration view](./images/integration_settings.png)]
+![integration view](./images/integration_view.png)
+![configuration view](./images/integration_settings.png)
 
 
 ## Installation via HACS
