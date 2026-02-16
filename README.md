@@ -2,28 +2,9 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 
-Custom Home Assistant integration for **Haier heat pumps** using the [PyHaier](https://github.com/ktostam/PyHaier) library over Modbus TCP.
+Custom Home Assistant integration for **Haier heat pumps** using the [PyHaier](https://github.com/ktostam/PyHaier) library over Modbus TCP. Requires WIFI->RS485 converter see [HW_README](./HW_README.md) for more details. Enabled with AU162FYCRA(HW). Should also work with AU082FYCRA(HW), AU052FYCRB(HW), AU112FYCRA(HW).
 
-## Architecture
 
-```mermaid
-graph TB
-    subgraph "Home Assistant"
-        CF["Config Flow<br/>(3-step setup)"] --> INIT["__init__.py<br/>(setup + antifreeze)"]
-        INIT --> COORD["Coordinator<br/>(30s polling)"]
-        INIT --> AF["AntifreezeManager<br/>(always-on)"]
-        COORD --> MB["ModbusClient<br/>(async + thread-safe)"]
-        COORD --> SENS["~35 Sensors"]
-        COORD --> BS["4 Binary Sensors"]
-        COORD --> CLIM["Climate Entity"]
-        COORD --> SEL["Mode Select"]
-        COORD --> NUM["DHW Number"]
-        CLIM --> HC["Heating Curve Engine"]
-    end
-    MB <--> |"Modbus TCP"| HP["Haier Heat Pump"]
-    EXT["External Temp Sensor"] --> CLIM
-    DSW["Demand Switch"] --> CLIM
-```
 
 ## Features
 
@@ -40,6 +21,13 @@ graph TB
 - **Mode control**: eco / quiet / turbo
 - **DHW temperature control**: Adjustable domestic hot water target
 - **Safety first**: Rate limiting, read-before-write, write verification, temperature clamping
+
+## Views
+Integration:
+[![integration view](./images/integration_view.png)]
+Configuration:
+[![configuration view](./images/integration_settings.png)]
+
 
 ## Installation via HACS
 
@@ -69,6 +57,27 @@ graph TB
 - **Critical threshold** (default: 2°C): Turn on + set emergency temp
 - **Emergency CH temp** (default: 30°C): Temperature set during critical mode
 - **Recovery threshold** (default: 20°C): Deactivate protection
+
+## Architecture
+
+```mermaid
+graph TB
+    subgraph "Home Assistant"
+        CF["Config Flow<br/>(3-step setup)"] --> INIT["__init__.py<br/>(setup + antifreeze)"]
+        INIT --> COORD["Coordinator<br/>(30s polling)"]
+        INIT --> AF["AntifreezeManager<br/>(always-on)"]
+        COORD --> MB["ModbusClient<br/>(async + thread-safe)"]
+        COORD --> SENS["~35 Sensors"]
+        COORD --> BS["4 Binary Sensors"]
+        COORD --> CLIM["Climate Entity"]
+        COORD --> SEL["Mode Select"]
+        COORD --> NUM["DHW Number"]
+        CLIM --> HC["Heating Curve Engine"]
+    end
+    MB <--> |"Modbus TCP"| HP["Haier Heat Pump"]
+    EXT["External Temp Sensor"] --> CLIM
+    DSW["Demand Switch"] --> CLIM
+```
 
 ## Entities
 
