@@ -130,11 +130,13 @@ class HaierModbusClient:
 
     def _read_block(self, address: int, count: int) -> list[int] | None:
         """Synchronous register read with retries."""
-        if not self.connected:
-            if not self._connect():
-                return None
-
         for attempt in range(MODBUS_RETRIES):
+            # Ensure we are connected before trying
+            if not self.connected:
+                if not self._connect():
+                    time.sleep(1)  # Wait before next retry if connect failed
+                    continue
+
             try:
                 # Try with 'slave' first (pymodbus 3.x standard)
                 try:
@@ -143,11 +145,7 @@ class HaierModbusClient:
                         count=count,
                         slave=self._device_id,
                     )
-                except TypeError as exc_slave:
-                    _LOGGER.debug(
-                        "Pymodbus 'slave' argument failed (%s), trying 'unit'",
-                        exc_slave,
-                    )
+                except TypeError:
                     # Fallback to 'unit' (pymodbus 2.x standard)
                     try:
                         resp = self._client.read_holding_registers(
@@ -155,25 +153,16 @@ class HaierModbusClient:
                             count=count,
                             unit=self._device_id,
                         )
-                    except TypeError as exc_unit:
-                        _LOGGER.debug(
-                            "Pymodbus 'unit' argument failed (%s), trying 'device_id'",
-                            exc_unit,
-                        )
-                        # Fallback to 'device_id' (user's working script uses this)
+                    except TypeError:
+                        # Fallback to 'device_id'
                         try:
                             resp = self._client.read_holding_registers(
                                 address=address,
                                 count=count,
                                 device_id=self._device_id,
                             )
-                        except TypeError as exc_dev:
-                            _LOGGER.error(
-                                "Read failed: 'slave' (%s), 'unit' (%s), 'device_id' (%s) all rejected",
-                                exc_slave,
-                                exc_unit,
-                                exc_dev,
-                            )
+                        except TypeError:
+                            _LOGGER.error("Read failed: All device ID arguments rejected")
                             return None
 
                 if resp is None or resp.isError():
@@ -185,11 +174,14 @@ class HaierModbusClient:
                         MODBUS_RETRIES,
                         resp,
                     )
+                    # Force disconnect to ensure fresh connection on next retry
+                    self._disconnect()
                     time.sleep(0.5 * (attempt + 1))
                     continue
+                
                 return resp.registers
 
-            except ModbusException as exc:
+            except (ModbusException, Exception) as exc:
                 _LOGGER.warning(
                     "Modbus exception reading %d-%d (attempt %d/%d): %s",
                     address,
@@ -198,16 +190,9 @@ class HaierModbusClient:
                     MODBUS_RETRIES,
                     exc,
                 )
+                # Force disconnect to ensure fresh connection on next retry
+                self._disconnect()
                 time.sleep(0.5 * (attempt + 1))
-            except Exception as exc:  # pylint: disable=broad-except
-                _LOGGER.error(
-                    "Unexpected error reading registers %d-%d: %s (%s)",
-                    address,
-                    address + count - 1,
-                    exc,
-                    type(exc).__name__,
-                )
-                return None
 
         _LOGGER.error(
             "Failed to read registers %d-%d after %d retries",
@@ -228,108 +213,109 @@ class HaierModbusClient:
 
     def _write_registers(self, address: int, values: list[int]) -> bool:
         """Synchronous register write with rate limiting and verify."""
-        if not self.connected:
-            if not self._connect():
-                return False
+        for attempt in range(MODBUS_RETRIES):
+            if not self.connected:
+                if not self._connect():
+                    time.sleep(1)
+                    continue
 
-        # Rate limiting
-        elapsed = time.monotonic() - self._last_write_time
-        if elapsed < MIN_WRITE_INTERVAL:
-            time.sleep(MIN_WRITE_INTERVAL - elapsed)
+            # Rate limiting
+            elapsed = time.monotonic() - self._last_write_time
+            if elapsed < MIN_WRITE_INTERVAL:
+                time.sleep(MIN_WRITE_INTERVAL - elapsed)
 
-        try:
-            # Try with 'slave' first (pymodbus 3.x standard)
-            kwargs = {}
             try:
-                resp = self._client.write_registers(
-                    address=address,
-                    values=values,
-                    slave=self._device_id,
-                )
-                kwargs = {"slave": self._device_id}
-            except TypeError as exc_slave:
-                _LOGGER.debug(
-                    "Pymodbus 'slave' argument failed (%s), trying 'unit'",
-                    exc_slave,
-                )
-                # Fallback to 'unit' (pymodbus 2.x standard)
+                # Try with 'slave' first (pymodbus 3.x standard)
+                kwargs = {}
                 try:
                     resp = self._client.write_registers(
                         address=address,
                         values=values,
-                        unit=self._device_id,
+                        slave=self._device_id,
                     )
-                    kwargs = {"unit": self._device_id}
-                except TypeError as exc_unit:
-                    _LOGGER.debug(
-                        "Pymodbus 'unit' argument failed (%s), trying 'device_id'",
-                        exc_unit,
-                    )
-                    # Fallback to 'device_id' (user's working script uses this)
+                    kwargs = {"slave": self._device_id}
+                except TypeError:
+                    # Fallback to 'unit' (pymodbus 2.x standard)
                     try:
                         resp = self._client.write_registers(
                             address=address,
                             values=values,
-                            device_id=self._device_id,
+                            unit=self._device_id,
                         )
-                        kwargs = {"device_id": self._device_id}
-                    except TypeError as exc_dev:
-                        _LOGGER.error(
-                            "Write failed: 'slave' (%s), 'unit' (%s), 'device_id' (%s) all rejected",
-                            exc_slave,
-                            exc_unit,
-                            exc_dev,
-                        )
-                        return False
+                        kwargs = {"unit": self._device_id}
+                    except TypeError:
+                        # Fallback to 'device_id'
+                        try:
+                            resp = self._client.write_registers(
+                                address=address,
+                                values=values,
+                                device_id=self._device_id,
+                            )
+                            kwargs = {"device_id": self._device_id}
+                        except TypeError:
+                            _LOGGER.error("Write failed: All device ID arguments rejected")
+                            return False
 
-            self._last_write_time = time.monotonic()
+                if resp is None or resp.isError():
+                    _LOGGER.warning(
+                        "Modbus write error at %d (attempt %d/%d): %s",
+                        address,
+                        attempt + 1,
+                        MODBUS_RETRIES,
+                        resp,
+                    )
+                    self._disconnect()
+                    time.sleep(0.5 * (attempt + 1))
+                    continue
 
-            if resp is None or resp.isError():
-                _LOGGER.error(
-                    "Modbus write error at %d: %s", address, resp
+                self._last_write_time = time.monotonic()
+                _LOGGER.debug(
+                    "Wrote registers %d: %s (args: %s)", address, values, kwargs
                 )
-                return False
 
-            # Read-back verification
-            time.sleep(0.5)
-            verify = self._client.read_holding_registers(
-                address=address,
-                count=len(values),
-                **kwargs,
-            )
-            if verify is None or verify.isError():
-                _LOGGER.warning(
-                    "Could not verify write at %d (read-back failed)",
-                    address,
+                # Verify write
+                time.sleep(0.5)
+                verify = self._client.read_holding_registers(
+                    address=address,
+                    count=len(values),
+                    **kwargs,
                 )
-                return True  # Write may have succeeded
+                if verify is None or verify.isError():
+                    _LOGGER.warning(
+                        "Could not verify write at %d (read-back failed)",
+                        address,
+                    )
+                    # If verification read failed, we assume write MIGHT have worked, but it's risky.
+                    # Given we have a loop, maybe we should retry?
+                    # But if write worked and read failed, retrying write might be bad?
+                    # Let's return True but warn.
+                    return True
 
-            if verify.registers != values:
-                _LOGGER.warning(
-                    "Write verification mismatch at %d: wrote %s, read %s",
-                    address,
-                    values,
-                    verify.registers,
-                )
-                # Some bits may be set by the pump itself, don't fail
+                if verify.registers != values:
+                    _LOGGER.warning(
+                        "Write verification mismatch at %d: wrote %s, read %s",
+                        address,
+                        values,
+                        verify.registers,
+                    )
+                    # Some bits may be set by the pump itself, don't fail, but log.
+                    return True
+
                 return True
 
-            _LOGGER.debug(
-                "Successfully wrote and verified registers at %d", address
-            )
-            return True
+            except (ModbusException, Exception) as exc:
+                _LOGGER.warning(
+                    "Modbus exception writing %d (attempt %d/%d): %s",
+                    address,
+                    attempt + 1,
+                    MODBUS_RETRIES,
+                    exc,
+                )
+                self._disconnect()
+                time.sleep(0.5 * (attempt + 1))
 
-        except ModbusException as exc:
-            _LOGGER.error("Modbus write exception at %d: %s", address, exc)
-            return False
-        except Exception as exc:  # pylint: disable=broad-except
-            _LOGGER.error(
-                "Unexpected error writing registers at %d: %s (%s)",
-                address,
-                exc,
-                type(exc).__name__,
-            )
-            return False
+        _LOGGER.error("Failed to write registers %d after %d retries", address, MODBUS_RETRIES)
+        return False
 
 
     async def async_read_core(self) -> list[int] | None:
