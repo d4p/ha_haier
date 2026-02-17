@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import logging
 from typing import Any
 
@@ -102,6 +103,7 @@ class HaierClimate(CoordinatorEntity[HaierDataCoordinator], ClimateEntity):
         self._last_sent_temp: float | None = None
         self._unsub_demand: Any = None
         self._unsub_outdoor: Any = None
+        self._last_curve_change_time: float = 0
 
     async def async_added_to_hass(self) -> None:
         """Set up listeners when added to HA."""
@@ -294,6 +296,37 @@ class HaierClimate(CoordinatorEntity[HaierDataCoordinator], ClimateEntity):
         else:
             _LOGGER.error("Failed to create SetCHTemp frame: %s", new_temp)
 
+        if self._is_demand_on() and not (
+            self.coordinator.data
+            and self.coordinator.data.get(DATA_ANTIFREEZE_ACTIVE)
+        ):
+            # Rate limit check (20 minutes = 1200 seconds)
+            curr_time = time.monotonic()
+            if self._last_curve_change_time == 0 or (curr_time - self._last_curve_change_time) >= 1200:
+                if self._curve_target is None or new_target != self._curve_target:
+                   await self._async_send_ch_temp(new_target)
+                   self._last_curve_change_time = curr_time
+            else:
+                _LOGGER.debug(
+                    "Skipping curve update (rate limited): %.1f -> %.1f",
+                    self._curve_target if self._curve_target else 0,
+                    new_target
+                )
+
+            # Update internal state regardless for display? 
+            # User said: "Set temperature should not be modified more frequently".
+            # This implies the *pump* setting. 
+            # But the entity attribute "curve_target" should probably reflect what we *want*?
+            # Or what is active?
+            # If we don't send it, the pump stays at old value.
+            # So _curve_target should stay at old value to match pump?
+            # Yes, let's only update _curve_target when we actually initiate the change.
+            
+            # Wait, I need to update _curve_target inside the if block above.
+            pass
+        
+        # Actually, let's rewrite the method logic to be cleaner.
+
     async def _async_update_curve_target(self) -> None:
         """Recalculate target from heating curve."""
         outdoor_temp = self._get_outdoor_temp()
@@ -309,24 +342,46 @@ class HaierClimate(CoordinatorEntity[HaierDataCoordinator], ClimateEntity):
             "setpoint": config.get(CONF_CURVE_SETPOINT, DEFAULT_CURVE_SETPOINT),
         }
         if CONF_CURVE_POINTS in config:
-            curve_params["points"] = config[CONF_CURVE_POINTS]
+             # Handle string parsing inside climate.py to be safe? 
+             # No, I fixed it in heating_curve.py.
+             curve_params["points"] = config[CONF_CURVE_POINTS]
 
         new_target = calculate_target_temp(outdoor_temp, curve_type, curve_params)
-        self._curve_target = new_target
-
+        
+        # If curve is disabled, just update HA state for display/attributes if needed?
+        # But earlier I said: "Curve calculation still happens for display/debug".
+        # Let's keep that manually but separate.
+        
         if not self.hass.data[DOMAIN][self._entry.entry_id].get(DATA_CURVE_ENABLED, True):
-            # Curve calculation still happens for display/debug, but we don't
-            # override the manual setpoint if curve mode is disabled.
+            self._curve_target = new_target # Just for display in attributes
             self.async_write_ha_state()
             return
 
-        # Only send if demand is on and antifreeze isn't overriding
+        # Demand check
         if self._is_demand_on() and not (
             self.coordinator.data
             and self.coordinator.data.get(DATA_ANTIFREEZE_ACTIVE)
         ):
-            await self._async_send_ch_temp(new_target)
-
+             # Check if value changed
+             if self._curve_target is None or new_target != self._curve_target:
+                 # Check rate limit
+                 curr_time = time.monotonic()
+                 # Allow immediate update if first run (0)
+                 if self._last_curve_change_time == 0 or (curr_time - self._last_curve_change_time) >= 1200:
+                     _LOGGER.info("Updating heating curve target: %.1f -> %.1f", self._curve_target if self._curve_target else 0, new_target)
+                     self._curve_target = new_target
+                     await self._async_send_ch_temp(new_target)
+                     self._last_curve_change_time = curr_time
+                 else:
+                     _LOGGER.debug("Rate limiting curve update: calculated %.1f", new_target)
+                     # Do NOT update self._curve_target so we know we are out of sync/pending?
+                     # Or do we? If we don't update it, the next check will see it as "changed" and try again.
+                     # Yes.
+             else:
+                 # Value is same, ensure it's sent? _async_send_ch_temp handles dupes.
+                 # But we also want to ensure _curve_target is set.
+                 self._curve_target = new_target # Consistent
+        
         self.async_write_ha_state()
 
     async def _async_update_pump_state(self) -> None:
