@@ -130,8 +130,17 @@ def calculate_target_temp(
                 try:
                     points_raw = json.loads(points_raw)
                 except json.JSONDecodeError:
-                    _LOGGER.warning("Failed to parse curve points string: %s", points_raw)
-                    return clamp_ch_temp(DEFAULT_CURVE_BASE_TEMP)
+                    # Try parsing as comma-separated "key:value" string
+                    # e.g. "-20:45, 0:30, 20:25"
+                    try:
+                        points_dict = {}
+                        for pair in points_raw.split(','):
+                            key, val = pair.split(':')
+                            points_dict[float(key.strip())] = float(val.strip())
+                        points_raw = points_dict
+                    except ValueError:
+                        _LOGGER.warning("Failed to parse curve points string: %s", points_raw)
+                        return clamp_ch_temp(DEFAULT_CURVE_BASE_TEMP)
 
             # Ensure keys are floats
             if isinstance(points_raw, dict):
