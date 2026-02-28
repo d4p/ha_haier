@@ -296,37 +296,6 @@ class HaierClimate(CoordinatorEntity[HaierDataCoordinator], ClimateEntity):
         else:
             _LOGGER.error("Failed to create SetCHTemp frame: %s", new_temp)
 
-        if self._is_demand_on() and not (
-            self.coordinator.data
-            and self.coordinator.data.get(DATA_ANTIFREEZE_ACTIVE)
-        ):
-            # Rate limit check (20 minutes = 1200 seconds)
-            curr_time = time.monotonic()
-            if self._last_curve_change_time == 0 or (curr_time - self._last_curve_change_time) >= 1200:
-                if self._curve_target is None or new_target != self._curve_target:
-                   await self._async_send_ch_temp(new_target)
-                   self._last_curve_change_time = curr_time
-            else:
-                _LOGGER.debug(
-                    "Skipping curve update (rate limited): %.1f -> %.1f",
-                    self._curve_target if self._curve_target else 0,
-                    new_target
-                )
-
-            # Update internal state regardless for display? 
-            # User said: "Set temperature should not be modified more frequently".
-            # This implies the *pump* setting. 
-            # But the entity attribute "curve_target" should probably reflect what we *want*?
-            # Or what is active?
-            # If we don't send it, the pump stays at old value.
-            # So _curve_target should stay at old value to match pump?
-            # Yes, let's only update _curve_target when we actually initiate the change.
-            
-            # Wait, I need to update _curve_target inside the if block above.
-            pass
-        
-        # Actually, let's rewrite the method logic to be cleaner.
-
     async def _async_update_curve_target(self) -> None:
         """Recalculate target from heating curve."""
         outdoor_temp = self._get_outdoor_temp()
